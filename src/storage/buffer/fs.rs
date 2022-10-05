@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 /// This file implements a file API utilized primarily by the disk manager
 use std::fs::File;
 use std::io::SeekFrom;

@@ -1,13 +1,8 @@
-#![allow(unused)]
-
 use std::fs::{File, OpenOptions};
 
 use crate::shared::PAGE_SIZE;
 use crate::storage::buffer;
-use crate::sync::{
-    BinarySemaphore, BinarySemaphoreMethods as _, Latch as _, LatchType, RwLatch as _,
-    RwSynchronized, Synchronized,
-};
+use crate::sync::{Latch as _, Synchronized};
 
 pub struct DiskMgrCtx {
     num_writes: usize,
@@ -18,7 +13,7 @@ pub struct DiskMgrCtx {
 
 pub type DiskMgr = Synchronized<DiskMgrCtx>;
 
-trait DiskApi {
+pub trait DiskApi {
     fn create(path: &str) -> Self;
     fn read_page(&self, buf: &mut [u8; PAGE_SIZE], offset: u64) -> std::io::Result<()>;
     fn write_page(&self, buf: &[u8; PAGE_SIZE], offset: u64) -> std::io::Result<()>;
@@ -73,22 +68,11 @@ mod tests {
     use super::*;
     use crate::shared::{cwd, Song};
     use crate::storage::buffer::io;
-    use crate::sync::{
-        BinarySemaphore, BinarySemaphoreMethods as _, Latch as _, LatchType, RwLatch as _,
-        RwSynchronized, Synchronized,
-    };
+    use crate::sync::{BinarySemaphore, BinarySemaphoreMethods as _};
 
     fn setup() -> std::io::Result<String> {
         let dir = cwd() + "/tests/diskmgr_tests";
         std::fs::create_dir_all(std::path::Path::new(&dir))?;
-        let handle = OpenOptions::new()
-            .create(true)
-            .read(true)
-            .write(true)
-            .truncate(true)
-            .open(std::path::Path::new(
-                &(cwd() + "/tests/diskmgr_tests/test_file.bin"),
-            ))?;
         Ok((cwd() + "/tests/diskmgr_tests/test_file.bin").to_string())
     }
 
@@ -106,7 +90,7 @@ mod tests {
             return Ok(());
         }
         let buf = io::to_buffer(song).unwrap();
-        mgr.write_page(&buf, song.id as u64);
+        mgr.write_page(&buf, song.id as u64)?;
         println!("written song with id {}", song.id);
         mgr.unlatch();
         Ok(())
@@ -116,7 +100,7 @@ mod tests {
         mgr.latch();
         let inner = unsafe { &*mgr.data_ptr() };
         let mut buf = [0u8; PAGE_SIZE];
-        mgr.read_page(&mut buf, inner.last_write as u64);
+        mgr.read_page(&mut buf, inner.last_write as u64)?;
         let decoded: Song = io::from_buffer(&buf).unwrap();
         println!("last written: {}", inner.last_write);
         println!("read: {}", decoded);
@@ -173,16 +157,14 @@ mod tests {
             let songs = songs.clone();
             pool.spawn(move || {
                 let song = songs[i];
-                write_song(&diskmgr, &song, &sem);
+                assert!(!write_song(&diskmgr, &song, &sem).is_err());
             })
         }
 
-        for i in 0..songs.len() / 2 {
-            let sem = sem.clone();
+        for _ in 0..songs.len() / 2 {
             let diskmgr = diskmgr.clone();
-            let songs = songs.clone();
             pool.spawn(move || {
-                read_song(&diskmgr);
+                assert!(!read_song(&diskmgr).is_err());
             })
         }
 
