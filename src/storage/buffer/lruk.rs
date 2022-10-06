@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::{shared::FrameId, sync::Synchronized};
 
 pub struct LRUKReplacerInternal {

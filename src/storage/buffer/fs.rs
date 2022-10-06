@@ -2,7 +2,7 @@
 use std::fs::File;
 use std::io::SeekFrom;
 
-use crate::shared::PAGE_SIZE;
+use crate::shared::{PageId, PAGE_SIZE};
 
 /// Used to write a buffer to a specified offset in the file handle passed in
 pub fn write_bytes(mut handle: &File, bytes: &[u8; PAGE_SIZE], offset: u64) -> std::io::Result<()> {
@@ -10,6 +10,16 @@ pub fn write_bytes(mut handle: &File, bytes: &[u8; PAGE_SIZE], offset: u64) -> s
     handle.seek(SeekFrom::Start(offset))?;
     handle.write(bytes)?;
     Ok(())
+}
+
+/// Used to append a buffer to the end of the file handle. Returns the id of the page
+pub fn append_bytes(mut handle: &File, bytes: &[u8; PAGE_SIZE]) -> std::io::Result<PageId> {
+    use std::io::prelude::*;
+    let stat = handle.metadata().unwrap();
+    let page_id = stat.len() / PAGE_SIZE as u64;
+    handle.seek(SeekFrom::End(0))?;
+    handle.write(bytes)?;
+    Ok(page_id as PageId)
 }
 
 /// Used to read from a specified offset, enough bytes to fill the passed in buffer
@@ -187,5 +197,35 @@ mod tests {
 
         let cleanup_result = cleanup();
         assert!(!cleanup_result.is_err());
+    }
+
+    #[test]
+    fn test_append() {
+        let dir = cwd() + "/tests/fs_tests";
+        std::fs::create_dir_all(std::path::Path::new(&dir)).unwrap();
+        let handle = OpenOptions::new()
+            .create(true)
+            .read(true)
+            .write(true)
+            .truncate(true)
+            .open(std::path::Path::new(
+                &(cwd() + "/tests/fs_tests/test_append_file.bin"),
+            ))
+            .unwrap();
+
+        let car_radio = Song::new(0, "Car Radio", "Twenty-One Pilots");
+        let so_sad_so_sexy = Song::new(1, "So Sad So Sexy", "Lykke Li");
+        let sex_money_feelings_die = Song::new(2, "Sex Money Feelings Die", "Lykke Li");
+
+        let buf_one = io::to_buffer(&car_radio).unwrap();
+        let first: PageId = append_bytes(&handle, &buf_one).unwrap();
+        let buf_two = io::to_buffer(&so_sad_so_sexy).unwrap();
+        let second: PageId = append_bytes(&handle, &buf_two).unwrap();
+        let buf_three = io::to_buffer(&sex_money_feelings_die).unwrap();
+        let third: PageId = append_bytes(&handle, &buf_three).unwrap();
+
+        assert!(first == 0);
+        assert!(second == 1);
+        assert!(third == 2);
     }
 }

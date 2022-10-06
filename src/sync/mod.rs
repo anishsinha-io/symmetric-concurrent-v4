@@ -14,6 +14,8 @@ use parking_lot::lock_api::{RawMutex as _, RawRwLock as _, RawRwLockUpgrade as _
 use parking_lot::{Condvar, Mutex, RwLock};
 use std::sync::Arc;
 
+pub mod hashtable;
+
 /// BinarySemaphore: Semaphore with two states. Useful for setup tasks or making the main thread wait. Prefer using condvars if you're
 /// trying to synchronize threads though.
 pub type BinarySemaphore = Arc<(Mutex<bool>, Condvar)>;

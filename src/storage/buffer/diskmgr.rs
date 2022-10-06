@@ -1,6 +1,6 @@
 use std::fs::{File, OpenOptions};
 
-use crate::shared::PAGE_SIZE;
+use crate::shared::{PageId, PAGE_SIZE};
 use crate::storage::buffer;
 use crate::sync::{Latch as _, Synchronized};
 
@@ -17,6 +17,7 @@ pub trait DiskApi {
     fn create(path: &str) -> Self;
     fn read_page(&self, buf: &mut [u8; PAGE_SIZE], offset: u64) -> std::io::Result<()>;
     fn write_page(&self, buf: &[u8; PAGE_SIZE], offset: u64) -> std::io::Result<()>;
+    fn append_page(&self, buf: &[u8; PAGE_SIZE]) -> std::io::Result<PageId>;
     fn inner(&self) -> &mut DiskMgrCtx;
 }
 
@@ -52,6 +53,16 @@ impl DiskApi for DiskMgr {
         inner.num_flushes += 1;
         inner.last_write = loc as isize;
         Ok(())
+    }
+
+    fn append_page(&self, buf: &[u8; PAGE_SIZE]) -> std::io::Result<PageId> {
+        let mut inner = self.inner();
+        let page_id = buffer::fs::append_bytes(&inner.handle, &buf)?;
+        inner.num_writes += 1;
+        inner.handle.sync_all()?;
+        inner.num_flushes += 1;
+        inner.last_write = page_id;
+        Ok(page_id)
     }
 
     fn inner(&self) -> &mut DiskMgrCtx {
